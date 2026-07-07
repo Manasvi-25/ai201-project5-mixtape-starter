@@ -2,11 +2,36 @@
 
 ## AI Usage
 
-(To be completed in Milestone 4. I'll describe how I used AI to navigate the codebase, trace bugs, and verify fixes, along with any suggestions I accepted or rejected.)
+I used Claude throughout this project mostly to verify my debugging process, not to find the bugs for me or write the fixes.
+
+**Navigation:** Before starting the bugs, I used Claude to get a high-level overview of the codebase. It helped me understand how the models, routes, and services were organized so I knew where to start tracing each issue.
+
+**Tracing and hypothesis-checking:** For every issue, I first traced the code myself from the reported endpoint through the relevant service functions until I had a theory about what was causing the bug. Only after that did I use Claude to sanity-check my reasoning, explain any confusing code, or confirm that I hadn't missed another execution path. For Issue #1, I traced the streak update logic myself and noticed the Sunday `weekday()` check before using Claude to confirm my understanding of how the condition behaved. For Issue #3, I initially thought I had found the problem, but my `flask shell` tests didn't match what I expected. After digging through the database and recreating clean test data, I realized the confusing results were caused by leftover test data from an earlier shell session, and only then used Claude to confirm that the `outerjoin` without `.distinct()` was the actual root cause.
+
+**What I verified myself:** I reproduced every bug, implemented every fix, and ran all the verification steps myself in `flask shell`. After each change, I also checked that the normal behavior still worked so I wasn't introducing new bugs while fixing the original one.
+
+**Where AI output could have been misleading:** During Issue #3, an early explanation about the SQL join sounded reasonable, but it didn't line up with my test results. Instead of assuming the explanation was correct, I kept testing until I found the real issue was my own leftover test data. That was a good reminder that AI explanations still need to be verified against the actual code and data.
 
 ## Codebase Map
 
-(To be completed. Will include the main files, what each one is responsible for, and a data flow trace for at least one feature.)
+**app.py** — Creates the Flask app, initializes the database, and registers all the blueprints.
+
+**models.py** — Defines all the database models (`User`, `Song`, `Tag`, `ListeningEvent`, `Rating`, `Playlist`, and `Notification`) along with the association tables (`friendships`, `song_tags`, and `playlist_entries`) that handle many-to-many relationships.
+
+**routes/** — Contains one blueprint per feature (`songs.py`, `playlists.py`, `users.py`, `feed.py`). These files mostly parse request data, call the appropriate service function, and return a JSON response. Almost no business logic lives here.
+
+**services/** — This is where the application's core logic lives.
+- `streak_service.py` handles listening streak calculations.
+- `feed_service.py` builds the Friends Listening Now and activity feeds.
+- `search_service.py` handles song search and filtering.
+- `notification_service.py` manages notifications, song ratings, and playlist notification logic.
+- `playlist_service.py` creates playlists and returns songs in playlist order.
+
+**Data flow — User rates a song:**
+
+`POST /songs/<song_id>/rate` (`routes/songs.py`) → `notification_service.rate_song()` → validate the rating → create or update the `Rating` record → commit the change → call `create_notification()` (if the rater isn't the song's sharer) → return the updated rating as JSON.
+
+**Pattern noticed:** Every route follows the same pattern: parse the request, call a service function, and return the response. The actual business logic lives almost entirely in the `services/` layer, which is also where every bug I investigated ended up being.
 
 ## Root Cause Analysis
 
