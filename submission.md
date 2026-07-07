@@ -50,3 +50,12 @@
 
 **Your fix and side-effect check:** I added a `create_notification()` call to `rate_song()` after the rating is saved, following the same logic as `add_to_playlist()`, so users don't get notified about their own actions. I verified that the song's sharer now gets a notification when someone else rates their song, and I also confirmed that playlist notifications still work exactly as before.
 
+### Issue #5 — The last song in a playlist never shows up
+
+**How you reproduced it:** In `flask shell`, I checked the raw `playlist_entries` table for an existing playlist and confirmed it had 7 songs (positions 1–7). Then I called `get_playlist_songs()` on the same playlist, and it only returned 6 songs. The song in the last position was always missing.
+
+**How you found the root cause:** I traced the flow from the `/playlists/<id>/songs` endpoint in `routes/playlists.py` to `playlist_service.get_playlist_songs()`. After looking through the query, I noticed the final return statement was slicing the list with `songs[:-1]`.
+
+**The root cause:** The function was returning `songs[:-1]`, which removes the last item from the list every time. Since the songs are already sorted by position, the last item is always the newest song in the playlist. That explains why the most recently added song never appeared, and why adding another song made the previously missing one show up.
+
+**Your fix and side-effect check:** I removed the unnecessary `[:-1]` slice so the function returns the full list of songs. I verified that a playlist with 7 entries now returns all 7 songs in the correct order.
