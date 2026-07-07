@@ -71,17 +71,6 @@ def add_to_playlist(playlist_id: str, song_id: str, added_by_user_id: str) -> No
 
 
 def rate_song(user_id: str, song_id: str, score: int) -> Rating:
-    """
-    Save a user's rating for a song.
-
-    Args:
-        user_id: The ID of the user submitting the rating.
-        song_id: The ID of the song being rated.
-        score: An integer from 1 to 5.
-
-    Returns:
-        The created or updated Rating instance.
-    """
     if score < 1 or score > 5:
         raise ValueError("Score must be between 1 and 5")
 
@@ -93,11 +82,7 @@ def rate_song(user_id: str, song_id: str, score: int) -> Rating:
     if not rater:
         raise ValueError(f"User {user_id} not found")
 
-    # Check if the user has already rated this song
-    existing = db.session.query(Rating).filter_by(
-        user_id=user_id, song_id=song_id
-    ).first()
-
+    existing = db.session.query(Rating).filter_by(user_id=user_id, song_id=song_id).first()
     if existing:
         existing.score = score
         rating = existing
@@ -107,8 +92,15 @@ def rate_song(user_id: str, song_id: str, score: int) -> Rating:
 
     db.session.commit()
 
-    return rating
+    # Notify the song's sharer (if it wasn't them who rated it)
+    if song.shared_by != user_id:
+        create_notification(
+            user_id=song.shared_by,
+            notification_type="song_rated",
+            body=f"{rater.username} rated your song '{song.title}' {score} stars.",
+        )
 
+    return rating
 
 def get_notifications(user_id: str, unread_only: bool = False) -> list[dict]:
     """

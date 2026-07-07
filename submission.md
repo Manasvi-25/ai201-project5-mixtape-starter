@@ -39,3 +39,14 @@
 **The root cause:** Since `song_tags` is a many-to-many table, joining it creates one row per matching tag. So if a song has 3 tags, the query returns 3 rows for that same song. Because the query wasn't deduplicating the results, `search_songs()` returned the same song multiple times.
 
 **Your fix and side-effect check:** I added `.distinct()` to the query so SQLAlchemy only returns each `Song` once, even if it matches multiple tags. I tested it with a song that had 3 tags and it now only appears once. I also checked songs with 0 and 1 tags to make sure they still return correctly.
+
+### Issue #4 — I got notified when a friend added my song to a playlist but not when they rated it
+
+**How you reproduced it:** In `flask shell`, I called `rate_song()` on a song that wasn't owned by the person rating it. Before and after rating the song, I checked the sharer's notifications using `get_notifications()`. The notification count didn't change, even though the rating was saved successfully.
+
+**How you found the root cause:** I compared the code in `add_to_playlist()` and `rate_song()` side by side in `notification_service.py`. The playlist flow creates a notification after adding the song (as long as the user isn't notifying themselves), but the rating flow didn't have anything similar.
+
+**The root cause:** The notification logic was simply missing from `rate_song()`. The function saved the rating and committed it to the database, but it never called `create_notification()`. So the feature wasn't broken because of a bad condition or typo, it was just never implemented in the rating flow.
+
+**Your fix and side-effect check:** I added a `create_notification()` call to `rate_song()` after the rating is saved, following the same logic as `add_to_playlist()`, so users don't get notified about their own actions. I verified that the song's sharer now gets a notification when someone else rates their song, and I also confirmed that playlist notifications still work exactly as before.
+
