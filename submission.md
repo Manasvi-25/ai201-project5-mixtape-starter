@@ -29,3 +29,13 @@
 **The root cause:** The cutoff was calculated as `datetime.now(timezone.utc) - timedelta(hours=24)`, which creates a rolling 24-hour window instead of resetting at the start of a new day. Because of that, an 11pm listen from yesterday stayed in the feed until 11pm today, exactly matching the reported bug.
 
 **Your fix and side-effect check:** I changed the cutoff to reset at midnight using `datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)`, so only events from the current day are considered "listening now." I verified that events from earlier today still appear, while events from 11pm the previous day are correctly filtered out.
+
+### Issue #3 — The same song keeps showing up twice in search
+
+**How you reproduced it:** In `flask shell`, I created a test song with 3 tags and searched for it using `search_songs()`. Instead of returning one result, the same song showed up multiple times, once for each tag.
+
+**How you found the root cause:** I traced the flow from the `/search` endpoint in `routes/songs.py` to `search_service.search_songs()`. Looking through the query, I found it was doing an `outerjoin` on the `song_tags` association table without removing duplicate results.
+
+**The root cause:** Since `song_tags` is a many-to-many table, joining it creates one row per matching tag. So if a song has 3 tags, the query returns 3 rows for that same song. Because the query wasn't deduplicating the results, `search_songs()` returned the same song multiple times.
+
+**Your fix and side-effect check:** I added `.distinct()` to the query so SQLAlchemy only returns each `Song` once, even if it matches multiple tags. I tested it with a song that had 3 tags and it now only appears once. I also checked songs with 0 and 1 tags to make sure they still return correctly.
